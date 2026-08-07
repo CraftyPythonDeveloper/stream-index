@@ -4,18 +4,23 @@ Typed data models shared across the addon.
 
 from __future__ import annotations
 
+from typing import Any
+from pydantic import BaseModel
 from dataclasses import dataclass, field
 
 
 @dataclass
-class StreamResult:
-    """A single playable stream to return to Stremio."""
+class StreamResult(BaseModel):
+    """A playable stream returned to Stremio."""
 
     title: str
     """Shown in the Stremio stream list (e.g. 'HDHub4u • 1080p WEB-DL')."""
 
     url: str
     """Direct video URL or M3U8 playlist URL."""
+
+    behaviorHints: dict[str, Any] | None = None
+    """Stremio behaviour hints (e.g. notWebReady, bingeGroup)."""
 
     description: str | None = None
     """Optional subtitle shown below the title in Stremio."""
