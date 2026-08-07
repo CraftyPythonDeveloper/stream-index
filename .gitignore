@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# uv
+uv.lock
+
+# Environment variables (never commit real secrets)
+.env
+.env.local
+.env.production
+
+# Reference repositories (large, not part of the project)
+temp/
+
+# Test cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

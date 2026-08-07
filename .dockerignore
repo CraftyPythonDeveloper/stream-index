@@ -1,0 +1,47 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# uv
+uv.lock
+
+# Temp / reference repos (large, not needed in image)
+temp/
+
+# Tests
+tests/
+
+# Development files
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Git
+.git/
+.gitignore
+
+# Docs
+README.md
+*.md
+
+# OS
+.DS_Store
+Thumbs.db
