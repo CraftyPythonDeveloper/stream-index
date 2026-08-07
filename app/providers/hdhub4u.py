@@ -585,6 +585,10 @@ class HDHub4uProvider(BaseProvider):
             for a in soup.find_all("a"):
                 href = a.get("href", "")
                 if href and href.startswith("http") and self._is_hosting_link(href):
+                    # Prevent infinite recursion on site navigation (e.g. home logo)
+                    if href.strip("/") == "https://hblinks.co" or href == url:
+                        continue
+                    
                     nested = await self._extract_link(href, label)
                     streams.extend(nested)
         except Exception:
