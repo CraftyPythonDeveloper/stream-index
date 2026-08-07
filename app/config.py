@@ -48,7 +48,8 @@ class Settings:
 
     # --- Server ---
     addon_host: str = _str("ADDON_HOST", "0.0.0.0")
-    addon_port: int = _int("ADDON_PORT", 7000)
+    # Many PaaS providers (Render, Heroku) inject $PORT dynamically
+    addon_port: int = _int("ADDON_PORT", _int("PORT", 7000))
     addon_public_url: str = _str("ADDON_PUBLIC_URL", "")
 
     # --- Logging ---
