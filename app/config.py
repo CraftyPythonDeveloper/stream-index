@@ -83,12 +83,7 @@ class Settings:
         "https://wild-surf-4a0d.phisher1.workers.dev",
     )
 
-    # --- Cloudflare Worker redirect-resolver ---
-    # Set CF_WORKER_URL to the deployed Worker base URL to enable seek-fix proxying.
-    # When empty (default) stream URLs are returned as-is.
-    cf_worker_url: str = _str("CF_WORKER_URL", "")
-    # Optional shared secret — must match PROXY_TOKEN set via `wrangler secret put`.
-    cf_worker_token: str = _str("CF_WORKER_TOKEN", "")
+
 
     # --- Addon identity ---
     addon_id: str = _str("ADDON_ID", "community.stremio.stream-index")

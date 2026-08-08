@@ -1,9 +1,0 @@
-name = "stream-index-resolver"
-main = "worker.js"
-compatibility_date = "2024-09-23"
-
-# Workers are deployed globally to Cloudflare's edge network.
-# No KV, R2, D1, or any paid add-ons required — free tier only.
-
-[observability]
-enabled = true

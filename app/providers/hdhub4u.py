@@ -27,14 +27,15 @@ _extract_link(url, label)
     otherwise → return as-is (direct link)
 
 _wrap_url(url)
-  → When CF_WORKER_URL is configured, wraps the final stream URL through
-    the Cloudflare Worker redirect-resolver so players can seek correctly.
-    Pixeldrain URLs are excluded (they already support Range natively).
-    When CF_WORKER_URL is empty (default) the URL is returned unchanged.
+  → When extracting stream links (FSL, Direct, S3), the provider resolves
+    the 302 redirects server-side and returns the final direct CDN URL.
+    This ensures Stremio's ExoPlayer can seek using HTTP Range requests
+    without dropping headers across redirects.
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 import re
@@ -366,7 +367,8 @@ class HDHub4uProvider(BaseProvider):
                 # Unknown / direct link — return as-is
                 quality = self._detect_quality(url)
                 title = f"{label} • {quality}" if quality else label
-                return [StreamResult(title=title, url=self._wrap_url(url), behavior_hints=self._stream_hints(url))]
+                final_url = await self._resolve_final_url(url)
+                return [StreamResult(title=title, url=final_url, behavior_hints=self._stream_hints(final_url))]
         except Exception:
             logger.warning("[HDHub4u] Extractor failed for %s", url, exc_info=True)
             return []
@@ -488,24 +490,22 @@ class HDHub4uProvider(BaseProvider):
             size = size_el.get_text().strip() if size_el else ""
             size_label = f" [{size}]" if size else ""
 
-            for btn in dl_soup.select("a.btn"):
-                link = btn.get("href", "")
-                btn_text = btn.get_text().strip().lower()
+            tasks = []
 
-                if not link:
-                    continue
-
+            async def process_btn(btn_text: str, link: str):
                 if "fsl server" in btn_text:
+                    final_url = await self._resolve_final_url(link)
                     streams.append(StreamResult(
                         title=f"{label} • {quality}{size_label} [FSL]",
-                        url=self._wrap_url(link),
-                        behavior_hints=self._stream_hints(link),
+                        url=final_url,
+                        behavior_hints=self._stream_hints(final_url),
                     ))
                 elif "download file" in btn_text or "direct" in btn_text:
+                    final_url = await self._resolve_final_url(link)
                     streams.append(StreamResult(
                         title=f"{label} • {quality}{size_label} [Direct]",
-                        url=self._wrap_url(link),
-                        behavior_hints=self._stream_hints(link),
+                        url=final_url,
+                        behavior_hints=self._stream_hints(final_url),
                     ))
                 elif "buzzserver" in btn_text:
                     try:
@@ -521,10 +521,11 @@ class HDHub4uProvider(BaseProvider):
                             or ""
                         )
                         if redirect_url:
+                            final_url = await self._resolve_final_url(redirect_url)
                             streams.append(StreamResult(
                                 title=f"{label} • {quality}{size_label} [BuzzServer]",
-                                url=self._wrap_url(redirect_url),
-                                behavior_hints=self._stream_hints(redirect_url),
+                                url=final_url,
+                                behavior_hints=self._stream_hints(final_url),
                             ))
                     except Exception:
                         logger.debug("[HDHub4u] BuzzServer redirect failed for %s", link)
@@ -535,23 +536,36 @@ class HDHub4uProvider(BaseProvider):
                         url=pd_url,
                     ))
                 elif "s3 server" in btn_text:
+                    final_url = await self._resolve_final_url(link)
                     streams.append(StreamResult(
                         title=f"{label} • {quality}{size_label} [S3]",
-                        url=self._wrap_url(link),
-                        behavior_hints=self._stream_hints(link),
+                        url=final_url,
+                        behavior_hints=self._stream_hints(final_url),
                     ))
                 elif "fslv2" in btn_text:
+                    final_url = await self._resolve_final_url(link)
                     streams.append(StreamResult(
                         title=f"{label} • {quality}{size_label} [FSLv2]",
-                        url=self._wrap_url(link),
-                        behavior_hints=self._stream_hints(link),
+                        url=final_url,
+                        behavior_hints=self._stream_hints(final_url),
                     ))
                 elif "mega server" in btn_text:
+                    final_url = await self._resolve_final_url(link)
                     streams.append(StreamResult(
                         title=f"{label} • {quality}{size_label} [Mega]",
-                        url=self._wrap_url(link),
-                        behavior_hints=self._stream_hints(link),
+                        url=final_url,
+                        behavior_hints=self._stream_hints(final_url),
                     ))
+
+            for btn in dl_soup.select("a.btn"):
+                link = btn.get("href", "")
+                btn_text = btn.get_text().strip().lower()
+                if not link:
+                    continue
+                tasks.append(process_btn(btn_text, link))
+
+            if tasks:
+                await asyncio.gather(*tasks)
 
         except Exception:
             logger.warning("[HDHub4u] HubCloud extraction failed for %s", url, exc_info=True)
@@ -576,7 +590,8 @@ class HDHub4uProvider(BaseProvider):
             if _HUBCLOUD_RE.search(href):
                 return await self._extract_hubcloud(href, label)
             quality = self._detect_quality(href) or "Unknown"
-            return [StreamResult(title=f"{label} • {quality}", url=self._wrap_url(href), behavior_hints=self._stream_hints(href))]
+            final_url = await self._resolve_final_url(href)
+            return [StreamResult(title=f"{label} • {quality}", url=final_url, behavior_hints=self._stream_hints(final_url))]
         except Exception:
             logger.debug("[HDHub4u] HubDrive extraction failed for %s", url, exc_info=True)
             return []
@@ -616,40 +631,27 @@ class HDHub4uProvider(BaseProvider):
             decoded = _b64decode(encoded)
             final_url = decoded.split("link=")[-1].strip()
             quality = self._detect_quality(final_url) or "Unknown"
-            return [StreamResult(title=f"{label} • {quality} [HubCDN]", url=self._wrap_url(final_url), behavior_hints=self._stream_hints(final_url))]
+            final_url = await self._resolve_final_url(final_url)
+            return [StreamResult(title=f"{label} • {quality} [HubCDN]", url=final_url, behavior_hints=self._stream_hints(final_url))]
         except Exception:
             logger.debug("[HDHub4u] HubCDN extraction failed for %s", url, exc_info=True)
             return []
 
-    # ------------------------------------------------------------------
-    # CF Worker URL wrapper
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _wrap_url(url: str) -> str:
+    async def _resolve_final_url(self, url: str) -> str:
         """
-        Wrap a final stream URL through the Cloudflare Worker redirect-resolver.
-
-        When CF_WORKER_URL is set in settings the URL is base64url-encoded and
-        passed as a query parameter to the Worker's /resolve endpoint.  The
-        Worker follows the hosting-service redirect chain server-side and
-        returns a 302 pointing directly at the bare CDN URL, so the player's
-        Range request (for seeking) reaches the CDN unchanged.
-
-        Pixeldrain /api/file/ URLs are excluded — they already support HTTP
-        Range requests natively.
-
-        When CF_WORKER_URL is empty (default) the URL is returned as-is.
+        Resolves a hosting service URL to its final CDN destination
+        by following 301/302/303 redirects server-side.
         """
-        worker_base = settings.cf_worker_url.rstrip("/")
-        if not worker_base:
+        try:
+            resp = await self._client.get(url, headers=self._headers, follow_redirects=False)
+            if resp.status_code in (301, 302, 303, 307, 308):
+                location = resp.headers.get("location")
+                if location:
+                    return urljoin(url, location)
             return url
-
-        encoded = base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
-        wrapped = f"{worker_base}/resolve?url={encoded}"
-        if settings.cf_worker_token:
-            wrapped += f"&token={settings.cf_worker_token}"
-        return wrapped
+        except Exception:
+            logger.debug("[HDHub4u] Failed to resolve redirect for %s", url)
+            return url
 
     @staticmethod
     def _stream_hints(url: str) -> dict:
