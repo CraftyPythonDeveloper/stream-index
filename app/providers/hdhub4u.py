@@ -368,7 +368,7 @@ class HDHub4uProvider(BaseProvider):
                 quality = self._detect_quality(url)
                 title = f"{label} • {quality}" if quality else label
                 final_url = await self._resolve_final_url(url)
-                return [StreamResult(title=title, url=final_url, behavior_hints=self._stream_hints(final_url))]
+                return [StreamResult(title=title, url=final_url, behavior_hints=self._stream_hints(final_url, referer=url))]
         except Exception:
             logger.warning("[HDHub4u] Extractor failed for %s", url, exc_info=True)
             return []
@@ -498,14 +498,14 @@ class HDHub4uProvider(BaseProvider):
                     streams.append(StreamResult(
                         title=f"{label} • {quality}{size_label} [FSL]",
                         url=final_url,
-                        behavior_hints=self._stream_hints(final_url),
+                        behavior_hints=self._stream_hints(final_url, referer=link),
                     ))
                 elif "download file" in btn_text or "direct" in btn_text:
                     final_url = await self._resolve_final_url(link)
                     streams.append(StreamResult(
                         title=f"{label} • {quality}{size_label} [Direct]",
                         url=final_url,
-                        behavior_hints=self._stream_hints(final_url),
+                        behavior_hints=self._stream_hints(final_url, referer=link),
                     ))
                 elif "buzzserver" in btn_text:
                     try:
@@ -525,7 +525,7 @@ class HDHub4uProvider(BaseProvider):
                             streams.append(StreamResult(
                                 title=f"{label} • {quality}{size_label} [BuzzServer]",
                                 url=final_url,
-                                behavior_hints=self._stream_hints(final_url),
+                                behavior_hints=self._stream_hints(final_url, referer=redirect_url),
                             ))
                     except Exception:
                         logger.debug("[HDHub4u] BuzzServer redirect failed for %s", link)
@@ -540,21 +540,21 @@ class HDHub4uProvider(BaseProvider):
                     streams.append(StreamResult(
                         title=f"{label} • {quality}{size_label} [S3]",
                         url=final_url,
-                        behavior_hints=self._stream_hints(final_url),
+                        behavior_hints=self._stream_hints(final_url, referer=link),
                     ))
                 elif "fslv2" in btn_text:
                     final_url = await self._resolve_final_url(link)
                     streams.append(StreamResult(
                         title=f"{label} • {quality}{size_label} [FSLv2]",
                         url=final_url,
-                        behavior_hints=self._stream_hints(final_url),
+                        behavior_hints=self._stream_hints(final_url, referer=link),
                     ))
                 elif "mega server" in btn_text:
                     final_url = await self._resolve_final_url(link)
                     streams.append(StreamResult(
                         title=f"{label} • {quality}{size_label} [Mega]",
                         url=final_url,
-                        behavior_hints=self._stream_hints(final_url),
+                        behavior_hints=self._stream_hints(final_url, referer=link),
                     ))
 
             for btn in dl_soup.select("a.btn"):
@@ -591,7 +591,7 @@ class HDHub4uProvider(BaseProvider):
                 return await self._extract_hubcloud(href, label)
             quality = self._detect_quality(href) or "Unknown"
             final_url = await self._resolve_final_url(href)
-            return [StreamResult(title=f"{label} • {quality}", url=final_url, behavior_hints=self._stream_hints(final_url))]
+            return [StreamResult(title=f"{label} • {quality}", url=final_url, behavior_hints=self._stream_hints(final_url, referer=href))]
         except Exception:
             logger.debug("[HDHub4u] HubDrive extraction failed for %s", url, exc_info=True)
             return []
@@ -632,7 +632,7 @@ class HDHub4uProvider(BaseProvider):
             final_url = decoded.split("link=")[-1].strip()
             quality = self._detect_quality(final_url) or "Unknown"
             final_url = await self._resolve_final_url(final_url)
-            return [StreamResult(title=f"{label} • {quality} [HubCDN]", url=final_url, behavior_hints=self._stream_hints(final_url))]
+            return [StreamResult(title=f"{label} • {quality} [HubCDN]", url=final_url, behavior_hints=self._stream_hints(final_url, referer=decoded))]
         except Exception:
             logger.debug("[HDHub4u] HubCDN extraction failed for %s", url, exc_info=True)
             return []
@@ -640,18 +640,22 @@ class HDHub4uProvider(BaseProvider):
     async def _resolve_final_url(self, url: str) -> str:
         """
         Resolves a hosting service URL to its final CDN destination
-        by following 301/302/303 redirects server-side.
+        by following up to 5 redirects server-side.
         """
-        try:
-            resp = await self._client.get(url, headers=self._headers, follow_redirects=False)
-            if resp.status_code in (301, 302, 303, 307, 308):
-                location = resp.headers.get("location")
-                if location:
-                    return urljoin(url, location)
-            return url
-        except Exception:
-            logger.debug("[HDHub4u] Failed to resolve redirect for %s", url)
-            return url
+        current_url = url
+        for _ in range(5):
+            try:
+                resp = await self._client.get(current_url, headers=self._headers, follow_redirects=False)
+                if resp.status_code in (301, 302, 303, 307, 308):
+                    location = resp.headers.get("location")
+                    if location:
+                        current_url = urljoin(current_url, location)
+                        continue
+                return current_url
+            except Exception:
+                logger.debug("[HDHub4u] Failed to resolve redirect for %s", current_url)
+                return current_url
+        return current_url
 
     @staticmethod
     def _stream_hints(url: str) -> dict:
@@ -674,7 +678,7 @@ class HDHub4uProvider(BaseProvider):
         return {
             "headers": {
                 "Cookie": "xla=s4t",
-                "Referer": origin + "/",
+                "Referer": referer if referer else (origin + "/"),
                 "User-Agent": settings.user_agent,
             }
         }
