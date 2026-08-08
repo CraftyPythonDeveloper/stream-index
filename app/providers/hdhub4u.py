@@ -640,21 +640,42 @@ class HDHub4uProvider(BaseProvider):
     async def _resolve_final_url(self, url: str) -> str:
         """
         Resolves a hosting service URL to its final CDN destination
-        by following up to 5 redirects server-side.
+        by following up to 5 redirects server-side, without downloading the body.
         """
         current_url = url
-        for _ in range(5):
+        logger.debug("[HDHub4u] Starting stream resolution for raw URL: %s", url)
+        
+        for step in range(5):
             try:
-                resp = await self._client.get(current_url, headers=self._headers, follow_redirects=False)
-                if resp.status_code in (301, 302, 303, 307, 308):
+                req = self._client.build_request("GET", current_url, headers=self._headers)
+                resp = await self._client.send(req, stream=True, follow_redirects=False)
+                status = resp.status_code
+                content_type = resp.headers.get("content-type", "")
+                content_length = resp.headers.get("content-length", "")
+                
+                logger.debug(
+                    "[HDHub4u] Resolution step %d: status=%d, type=%s, length=%s",
+                    step + 1, status, content_type, content_length
+                )
+
+                if status in (301, 302, 303, 307, 308):
                     location = resp.headers.get("location")
+                    await resp.aclose()  # DO NOT READ BODY
+                    logger.debug("[HDHub4u] Redirect target: %s", location)
                     if location:
                         current_url = urljoin(current_url, location)
                         continue
+                        
+                # Ensure the body is closed without reading, guaranteeing we never download
+                # the 570 MB video just to resolve the URL.
+                await resp.aclose()
+                logger.debug("[HDHub4u] Final stream URL resolved: %s (body not consumed)", current_url)
                 return current_url
-            except Exception:
-                logger.debug("[HDHub4u] Failed to resolve redirect for %s", current_url)
+            except Exception as e:
+                logger.debug("[HDHub4u] Failed to resolve redirect for %s: %s", current_url, e)
                 return current_url
+                
+        logger.debug("[HDHub4u] Max redirect depth reached. Final stream URL: %s", current_url)
         return current_url
 
     @staticmethod
