@@ -360,7 +360,7 @@ class HDHub4uProvider(BaseProvider):
                 # Unknown / direct link — return as-is
                 quality = self._detect_quality(url)
                 title = f"{label} • {quality}" if quality else label
-                return [StreamResult(title=title, url=url, behavior_hints={"notWebReady": True})]
+                return [StreamResult(title=title, url=url)]
         except Exception:
             logger.warning("[HDHub4u] Extractor failed for %s", url, exc_info=True)
             return []
@@ -493,13 +493,11 @@ class HDHub4uProvider(BaseProvider):
                     streams.append(StreamResult(
                         title=f"{label} • {quality}{size_label} [FSL]",
                         url=link,
-                        behavior_hints={"notWebReady": True}
                     ))
                 elif "download file" in btn_text or "direct" in btn_text:
                     streams.append(StreamResult(
                         title=f"{label} • {quality}{size_label} [Direct]",
                         url=link,
-                        behavior_hints={"notWebReady": True}
                     ))
                 elif "buzzserver" in btn_text:
                     try:
@@ -518,7 +516,6 @@ class HDHub4uProvider(BaseProvider):
                             streams.append(StreamResult(
                                 title=f"{label} • {quality}{size_label} [BuzzServer]",
                                 url=redirect_url,
-                                behavior_hints={"notWebReady": True}
                             ))
                     except Exception:
                         logger.debug("[HDHub4u] BuzzServer redirect failed for %s", link)
@@ -527,25 +524,21 @@ class HDHub4uProvider(BaseProvider):
                     streams.append(StreamResult(
                         title=f"{label} • {quality}{size_label} [Pixeldrain]",
                         url=pd_url,
-                        behavior_hints={"notWebReady": True}
                     ))
                 elif "s3 server" in btn_text:
                     streams.append(StreamResult(
                         title=f"{label} • {quality}{size_label} [S3]",
                         url=link,
-                        behavior_hints={"notWebReady": True}
                     ))
                 elif "fslv2" in btn_text:
                     streams.append(StreamResult(
                         title=f"{label} • {quality}{size_label} [FSLv2]",
                         url=link,
-                        behavior_hints={"notWebReady": True}
                     ))
                 elif "mega server" in btn_text:
                     streams.append(StreamResult(
                         title=f"{label} • {quality}{size_label} [Mega]",
                         url=link,
-                        behavior_hints={"notWebReady": True}
                     ))
 
         except Exception:
@@ -557,7 +550,7 @@ class HDHub4uProvider(BaseProvider):
         """Convert any Pixeldrain page URL to a direct API download URL."""
         pd_url = self._build_pixeldrain_url(url)
         quality = self._detect_quality(url) or "Unknown"
-        return [StreamResult(title=f"{label} • {quality} [Pixeldrain]", url=pd_url, behavior_hints={"notWebReady": True})]
+        return [StreamResult(title=f"{label} • {quality} [Pixeldrain]", url=pd_url)]
 
     async def _extract_hubdrive(self, url: str, label: str) -> list[StreamResult]:
         """HubDrive → resolves to HubCloud or direct link."""
@@ -571,7 +564,7 @@ class HDHub4uProvider(BaseProvider):
             if _HUBCLOUD_RE.search(href):
                 return await self._extract_hubcloud(href, label)
             quality = self._detect_quality(href) or "Unknown"
-            return [StreamResult(title=f"{label} • {quality}", url=href, behavior_hints={"notWebReady": True})]
+            return [StreamResult(title=f"{label} • {quality}", url=href)]
         except Exception:
             logger.debug("[HDHub4u] HubDrive extraction failed for %s", url, exc_info=True)
             return []
@@ -611,7 +604,7 @@ class HDHub4uProvider(BaseProvider):
             decoded = _b64decode(encoded)
             final_url = decoded.split("link=")[-1].strip()
             quality = self._detect_quality(final_url) or "Unknown"
-            return [StreamResult(title=f"{label} • {quality} [HubCDN]", url=final_url, behavior_hints={"notWebReady": True})]
+            return [StreamResult(title=f"{label} • {quality} [HubCDN]", url=final_url)]
         except Exception:
             logger.debug("[HDHub4u] HubCDN extraction failed for %s", url, exc_info=True)
             return []
