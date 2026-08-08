@@ -366,7 +366,7 @@ class HDHub4uProvider(BaseProvider):
                 # Unknown / direct link — return as-is
                 quality = self._detect_quality(url)
                 title = f"{label} • {quality}" if quality else label
-                return [StreamResult(title=title, url=self._wrap_url(url))]
+                return [StreamResult(title=title, url=self._wrap_url(url), behavior_hints=self._stream_hints(url))]
         except Exception:
             logger.warning("[HDHub4u] Extractor failed for %s", url, exc_info=True)
             return []
@@ -499,11 +499,13 @@ class HDHub4uProvider(BaseProvider):
                     streams.append(StreamResult(
                         title=f"{label} • {quality}{size_label} [FSL]",
                         url=self._wrap_url(link),
+                        behavior_hints=self._stream_hints(link),
                     ))
                 elif "download file" in btn_text or "direct" in btn_text:
                     streams.append(StreamResult(
                         title=f"{label} • {quality}{size_label} [Direct]",
                         url=self._wrap_url(link),
+                        behavior_hints=self._stream_hints(link),
                     ))
                 elif "buzzserver" in btn_text:
                     try:
@@ -522,6 +524,7 @@ class HDHub4uProvider(BaseProvider):
                             streams.append(StreamResult(
                                 title=f"{label} • {quality}{size_label} [BuzzServer]",
                                 url=self._wrap_url(redirect_url),
+                                behavior_hints=self._stream_hints(redirect_url),
                             ))
                     except Exception:
                         logger.debug("[HDHub4u] BuzzServer redirect failed for %s", link)
@@ -535,16 +538,19 @@ class HDHub4uProvider(BaseProvider):
                     streams.append(StreamResult(
                         title=f"{label} • {quality}{size_label} [S3]",
                         url=self._wrap_url(link),
+                        behavior_hints=self._stream_hints(link),
                     ))
                 elif "fslv2" in btn_text:
                     streams.append(StreamResult(
                         title=f"{label} • {quality}{size_label} [FSLv2]",
                         url=self._wrap_url(link),
+                        behavior_hints=self._stream_hints(link),
                     ))
                 elif "mega server" in btn_text:
                     streams.append(StreamResult(
                         title=f"{label} • {quality}{size_label} [Mega]",
                         url=self._wrap_url(link),
+                        behavior_hints=self._stream_hints(link),
                     ))
 
         except Exception:
@@ -570,7 +576,7 @@ class HDHub4uProvider(BaseProvider):
             if _HUBCLOUD_RE.search(href):
                 return await self._extract_hubcloud(href, label)
             quality = self._detect_quality(href) or "Unknown"
-            return [StreamResult(title=f"{label} • {quality}", url=self._wrap_url(href))]
+            return [StreamResult(title=f"{label} • {quality}", url=self._wrap_url(href), behavior_hints=self._stream_hints(href))]
         except Exception:
             logger.debug("[HDHub4u] HubDrive extraction failed for %s", url, exc_info=True)
             return []
@@ -610,7 +616,7 @@ class HDHub4uProvider(BaseProvider):
             decoded = _b64decode(encoded)
             final_url = decoded.split("link=")[-1].strip()
             quality = self._detect_quality(final_url) or "Unknown"
-            return [StreamResult(title=f"{label} • {quality} [HubCDN]", url=self._wrap_url(final_url))]
+            return [StreamResult(title=f"{label} • {quality} [HubCDN]", url=self._wrap_url(final_url), behavior_hints=self._stream_hints(final_url))]
         except Exception:
             logger.debug("[HDHub4u] HubCDN extraction failed for %s", url, exc_info=True)
             return []
@@ -644,6 +650,32 @@ class HDHub4uProvider(BaseProvider):
         if settings.cf_worker_token:
             wrapped += f"&token={settings.cf_worker_token}"
         return wrapped
+
+    @staticmethod
+    def _stream_hints(url: str) -> dict:
+        """
+        Build Stremio behaviorHints with the HTTP headers the player must send
+        for ALL requests to this URL — including the Range requests used for
+        seeking.
+
+        This mirrors what CloudStream extensions do: they attach Cookie, Referer
+        and User-Agent to every ExtractorLink so the player’s OkHttp client
+        includes them on every byte-range request.  Without these headers the
+        hosting server either ignores the Range header or returns 200 from
+        byte 0, which resets the video.
+
+        The Referer is derived from the origin of the stream URL so it matches
+        what the hosting service expects.
+        """
+        parsed = urlparse(url)
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+        return {
+            "headers": {
+                "Cookie": "xla=s4t",
+                "Referer": origin + "/",
+                "User-Agent": settings.user_agent,
+            }
+        }
 
     # ------------------------------------------------------------------
     # Utility methods
