@@ -679,7 +679,7 @@ class HDHub4uProvider(BaseProvider):
         return current_url
 
     @staticmethod
-    def _stream_hints(url: str) -> dict:
+    def _stream_hints(url: str, referer: str = None) -> dict:
         """
         Build Stremio behaviorHints with the HTTP headers the player must send
         for ALL requests to this URL — including the Range requests used for
@@ -692,7 +692,7 @@ class HDHub4uProvider(BaseProvider):
         byte 0, which resets the video.
 
         The Referer is derived from the origin of the stream URL so it matches
-        what the hosting service expects.
+        what the hosting service expects, unless an explicit referer is provided.
         """
         parsed = urlparse(url)
         origin = f"{parsed.scheme}://{parsed.netloc}"
